@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>한국 → 벨라루스 EMS 택배 계산기</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:640px;margin:0 auto;padding:24px 16px 48px;color:#111;line-height:1.55}
+  h1{font-size:22px;margin:0 0 4px}
+  p.sub{color:#555;margin:0 0 20px}
+  label{display:block;font-weight:600;margin:16px 0 6px}
+  input,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid #bbb;border-radius:8px;font-size:16px}
+  .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .check{display:flex;gap:8px;align-items:center;font-weight:400;margin-top:16px}
+  .check input{width:auto}
+  button{width:100%;margin-top:20px;padding:13px;font-size:17px;font-weight:700;color:#fff;background:#c00;border:0;border-radius:10px;cursor:pointer}
+  .result{margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px;background:#fafafa}
+  .result .total{font-size:28px;font-weight:800;color:#c00}
+  .result table{width:100%;border-collapse:collapse;margin-top:8px}
+  .result td{padding:5px 0;border-bottom:1px solid #eee}
+  .result td:last-child{text-align:right;font-weight:600}
+  .err{color:#c00;font-weight:700}
+  .note{font-size:13px;color:#666;margin-top:20px}
+  .note a{color:#0645ad}
+  code{background:#eee;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<h1>한국 → 벨라루스 EMS 택배 계산기</h1>
+<p class="sub">우체국 국제특급(EMS) 공식 요금표 기준 · 벨라루스는 3지역 · 비서류 최대 20kg</p>
+
+<label for="type">종류</label>
+<select id="type">
+  <option value="parcel">비서류 (소포 · 상품)</option>
+  <option value="document">서류 (최대 2kg)</option>
+</select>
+
+<label for="weight">실중량 (g)</label>
+<input id="weight" type="number" min="1" step="1" value="8220" placeholder="예: 8220">
+
+<label>박스 크기 (cm)</label>
+<div class="row">
+  <input id="l" type="number" min="1" step="0.1" value="41" aria-label="가로">
+  <input id="w" type="number" min="1" step="0.1" value="31" aria-label="세로">
+  <input id="h" type="number" min="1" step="0.1" value="28" aria-label="높이">
+</div>
+
+<label class="check"><input id="prepaid" type="checkbox"> EMS 사전접수 5% 할인 적용</label>
+
+<label for="rate">환율 (선택 · 1 BYN = ___ 원)</label>
+<input id="rate" type="number" min="0" step="0.01" placeholder="예: 1250 — 입력하면 BYN 환산 표시">
+
+<button id="calc">요금 계산</button>
+<div class="result" id="result" hidden></div>
+
+<div class="note">
+  <strong>공식</strong><br>
+  부피중량(kg) = 가로 × 세로 × 높이(cm) ÷ 6,000<br>
+  요금적용중량 = max(실중량, 부피중량) → 구간 상한까지 올림 → 3지역 요금표에서 조회<br>
+  총요금 = 요금표 요금 − 사전접수 할인(5%, 해당 시)<br>
+  최대규격: 길이 ≤ 1.5m, 길이 + 둘레 ≤ 3m<br><br>
+  <strong>검증 사례</strong> — 실중량 8,220g, 41×31×28cm → 부피중량 5,931g → 적용중량 8.22kg → 8.5kg 구간 → <strong>128,500원</strong>. 우체국 조회 화면 실측과 일치.<br><br>
+  <strong>출처</strong><br>
+  · 요금 조회: <a href="https://ems.epost.go.kr/front.EmsDeliveryDelivery01.postal">ems.epost.go.kr — 배달소요일/요금조회</a><br>
+  · 요금표 PDF(2026년): <a href="https://ems.epost.go.kr/upFile/guide/2026emsPrice.pdf">2026emsPrice.pdf</a> — 비서류는 2026.7.1부터 추가운송수수료 포함 요금<br>
+  · 주의: 이 계산기는 참고용입니다. 실제 접수 시 우체국에서 정확한 요금이 계산됩니다. 관세·통관 조건은 별도입니다.
+</div>
+
+<script type="module">
+import { calculate } from './rates.js';
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('ko-KR');
+$('calc').onclick = () => {
+  const res = $('result');
+  const actualG = parseFloat($('weight').value);
+  const l = parseFloat($('l').value), w = parseFloat($('w').value), h = parseFloat($('h').value);
+  if (!actualG || !l || !w || !h) { res.hidden = false; res.innerHTML = '<p class="err">실중량과 박스 크기를 모두 입력하세요.</p>'; return; }
+  const r = calculate({ type: $('type').value, actualG, lCm: l, wCm: w, hCm: h, prepaidDiscount: $('prepaid').checked });
+  const rate = parseFloat($('rate').value);
+  if (!r.ok) {
+    res.hidden = false;
+    res.innerHTML = `<p class="err">접수 불가: ${r.reason}</p>
+    <table><tr><td>부피중량</td><td>${fmt(Math.round(r.volumetricKg*1000))} g</td></tr>
+    <tr><td>요금적용중량</td><td>${r.chargeableKg.toFixed(2)} kg</td></tr></table>`;
+    return;
+  }
+  const byn = rate ? (r.total / rate) : null;
+  res.hidden = false;
+  res.innerHTML = `
+    <div>총요금</div><div class="total">${fmt(r.total)} 원</div>
+    <table>
+      <tr><td>부피중량</td><td>${fmt(Math.round(r.volumetricKg*1000))} g</td></tr>
+      <tr><td>실중량</td><td>${fmt(Math.round(r.actualKg*1000))} g</td></tr>
+      <tr><td>요금적용중량</td><td>${r.chargeableKg.toFixed(2)} kg → ${r.stepKg}kg 구간</td></tr>
+      <tr><td>요금표 요금</td><td>${fmt(r.price)} 원</td></tr>
+      ${r.discount ? `<tr><td>사전접수 할인 (5%)</td><td>− ${fmt(r.discount)} 원</td></tr>` : ''}
+      ${byn ? `<tr><td>BYN 환산 (1 BYN = ${fmt(rate)}원)</td><td>약 ${byn.toFixed(2)} BYN</td></tr>` : ''}
+      <tr><td>최대규격</td><td>길이 ${r.size.longestM.toFixed(2)}m · 길이+둘레 ${r.size.totalM.toFixed(2)}m — 통과</td></tr>
+    </table>`;
+};
+$('calc').click();
+</script>
+</body>
+</html>
